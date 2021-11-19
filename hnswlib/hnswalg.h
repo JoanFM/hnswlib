@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jina.pb.h"
 #include "visited_list_pool.h"
 #include "hnswlib.h"
 #include <atomic>
@@ -9,9 +10,43 @@
 #include <unordered_set>
 #include <list>
 
+
+
 namespace hnswlib {
     typedef unsigned int tableint;
     typedef unsigned int linklistsizeint;
+
+    class DocumentArrayStore {
+      public:
+        DocumentArrayStore() {
+            num_elements_ = 10;
+            documents_array_ = (jina::DocumentProto*) malloc(num_elements_ * sizeof(jina::DocumentProto));
+        }
+
+        ~DocumentArrayStore() {
+            free(documents_array_);
+        }
+
+        void addDocument(tableint id, const jina::DocumentProto& document) {
+            if (id > num_elements_) {
+                auto old_num_elements = num_elements_;
+                // allocate twice as current, avoid multiple allocations
+                num_elements_ = num_elements_ * 2;
+                auto new_documents_array = (jina::DocumentProto *) malloc(num_elements_ * sizeof(jina::DocumentProto));
+                memmove(new_documents_array, documents_array_, old_num_elements * sizeof(jina::DocumentProto));
+                documents_array_ = new_documents_array;
+             }
+             memcpy(&documents_array_[id], &document, sizeof(document));
+        };
+
+        jina::DocumentProto getDocument(tableint id) {
+            return documents_array_[id];
+        };
+
+        private:
+            jina::DocumentProto* documents_array_;
+            tableint num_elements_;
+    };
 
     template<typename dist_t>
     class HierarchicalNSW : public AlgorithmInterface<dist_t> {
@@ -55,8 +90,7 @@ namespace hnswlib {
             cur_element_count = 0;
 
             visited_list_pool_ = new VisitedListPool(1, max_elements);
-
-
+            document_store_ = new DocumentArrayStore();
 
             //initializations for special treatment of the first node
             enterpoint_node_ = -1;
@@ -86,6 +120,7 @@ namespace hnswlib {
             }
             free(linkLists_);
             delete visited_list_pool_;
+            delete document_store_;
         }
 
         size_t max_elements_;
@@ -111,6 +146,7 @@ namespace hnswlib {
         // Note: Locks for additions can also be used to prevent this race condition if the querying of KNN is not exposed along with update/inserts i.e multithread insert/update/query in parallel.
         std::vector<std::mutex> link_list_update_locks_;
         tableint enterpoint_node_;
+        hnswlib::DocumentArrayStore* document_store_;
 
 
         size_t size_links_level0_;
@@ -819,6 +855,11 @@ namespace hnswlib {
 
         void addPoint(const void *data_point, labeltype label) {
             addPoint(data_point, label,-1);
+        }
+
+        void addDocument(const void *data_point, labeltype label, const jina::DocumentProto& document) {
+            auto& index = addPoint(data_point, label,-1);
+            document_store_->addDocument(index, document);
         }
 
         void updatePoint(const void *dataPoint, tableint internalId, float updateNeighborProbability) {
