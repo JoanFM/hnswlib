@@ -3,13 +3,18 @@ project (hnsw_lib)
 
 include_directories("${PROJECT_BINARY_DIR}")
 
-
+#set(PROTOBUG_INCLUDE_DIR "/usr/local/lib/pkgconfig")
+include(FindProtobuf)
+find_package(Protobuf REQUIRED)
+include_directories(${PROTOBUF_INCLUDE_DIR})
 
 set(SOURCE_EXE main.cpp)           
 
 set(SOURCE_LIB sift_1b.cpp)
 
 add_library(sift_test STATIC ${SOURCE_LIB})
+
+add_library(jina_proto STATIC hnswlib/jina.pb.cc)
 
 
 add_executable(main ${SOURCE_EXE})
@@ -25,4 +30,7 @@ add_executable(test_updates examples/updates_test.cpp)
 
 add_executable(searchKnnCloserFirst_test examples/searchKnnCloserFirst_test.cpp)
 
-target_link_libraries(main sift_test) 
+add_executable(jina_test jina_test.cpp)
+target_link_libraries(jina_test jina_proto ${Protobuf_LIBRARIES})
+
+target_link_libraries(main sift_test)
